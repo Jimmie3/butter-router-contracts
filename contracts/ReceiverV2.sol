@@ -9,12 +9,12 @@ import "@butternetwork/bridge/contracts/interface/IButterReceiver.sol";
 import "./abstract/SwapCallV2.sol";
 
 contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceiver {
-    uint256 constant gasForReFund = 90000;
-    address immutable bridgeAddress;
 
     using SafeERC20 for IERC20;
     using Address for address;
 
+    uint256 public gasForReFund = 80000;
+    address public bridgeAddress;
     mapping(address => bool) public keepers;
     mapping(bytes32 => bytes32) public storedFailedSwap;
 
@@ -62,8 +62,8 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
     );
 
     event Approve(address indexed executor, bool indexed flag);
-    // event SetBridgeAddress(address indexed _bridgeAddress);
-    // event SetGasForReFund(uint256 indexed _gasForReFund);
+    event SetBridgeAddress(address indexed _bridgeAddress);
+    event SetGasForReFund(uint256 indexed _gasForReFund);
     event UpdateKeepers(address _keeper, bool _flag);
 
     constructor(address _owner, address _wToken, address _bridgeAddress) payable SwapCallV2(_wToken) {
@@ -71,7 +71,7 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
         _transferOwnership(_owner);
         if (!_bridgeAddress.isContract()) revert Errors.NOT_CONTRACT();
         bridgeAddress = _bridgeAddress;
-        // _setBridgeAddress(_bridgeAddress);
+        _setBridgeAddress(_bridgeAddress);
     }
 
     function setAuthorization(address[] calldata _executors, bool _flag) external onlyOwner {
@@ -89,19 +89,16 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
         emit UpdateKeepers(_keeper, _flag);
     }
 
-    // function setBridgeAddress(address _bridgeAddress) public onlyOwner returns (bool) {
-    //     _setBridgeAddress(_bridgeAddress);
-    //     return true;
-    // }
+    function setBridgeAddress(address _bridgeAddress) public onlyOwner returns (bool) {
+        _setBridgeAddress(_bridgeAddress);
+        return true;
+    }
 
-    // function setGasForReFund(uint256 _gasForReFund) external onlyOwner {
-    //     gasForReFund = _gasForReFund;
-    //     emit SetGasForReFund(_gasForReFund);
-    // }
+    function setGasForReFund(uint256 _gasForReFund) external onlyOwner {
+        gasForReFund = _gasForReFund;
+        emit SetGasForReFund(_gasForReFund);
+    }
 
-    // function setWToken(address _wToken) external onlyOwner {
-    //     _setWToken(_wToken);
-    // }
 
     function editFuncBlackList(bytes4 _func, bool _flag) external onlyOwner {
         _editFuncBlackList(_func, _flag);
@@ -117,52 +114,50 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
         bytes calldata _swapAndCall
     ) external override nonReentrant {
         if (msg.sender != bridgeAddress) revert Errors.BRIDGE_ONLY();
-
         (bytes memory _swapData, bytes memory _callbackData) = abi.decode(_swapAndCall, (bytes, bytes));
         if ((_swapData.length + _callbackData.length) == 0) revert Errors.DATA_EMPTY();
+        uint256 gaslf = gasleft();
+        try this.doSwapAndCall{gas: (gaslf - gasForReFund)}(_orderId, _srcToken, _amount, _fromChain, _from, _swapData, _callbackData){
+        } catch  {
+            SwapParam memory swap = abi.decode(_swapData, (SwapParam));
+            _store(
+                _orderId,
+                _fromChain,
+                _srcToken,
+                swap.dstToken,
+                _amount,
+                swap.receiver,
+                swap.minAmount,
+                _from,
+                _callbackData
+          );
+        }
+    }
 
+    function doSwapAndCall(
+        bytes32 _orderId,
+        address _srcToken,
+        uint256 _amount,
+        uint256 _fromChain,
+        bytes calldata _from,
+        bytes calldata _swapData,
+        bytes calldata _callbackData
+    ) external {
+        if (msg.sender != address(this)) revert Errors.SELF_ONLY();
         SwapTemp memory swapTemp = _assignment(_fromChain, _srcToken, _amount, _from);
         (swapTemp.nativeBalance, swapTemp.inputBalance) = _checkBalance(swapTemp.srcAmount, swapTemp.srcToken);
 
-        uint256 gaslf;
-        uint256 minExecGas = gasForReFund;
         if (_swapData.length != 0) {
-            gaslf = gasleft();
-            bool needStore = true;
-            if (gaslf > minExecGas) {
-                try
-                    this.remoteSwap{gas: (gaslf - minExecGas)}(
-                        swapTemp.srcToken,
-                        swapTemp.srcAmount,
-                        swapTemp.inputBalance,
-                        _swapData
-                    )
-                returns (address dstToken, uint256 dstAmount, address receiver) {
-                    swapTemp.swapToken = dstToken;
-                    swapTemp.swapAmount = dstAmount;
-                    swapTemp.receiver = receiver;
-                    needStore = false;
-                } catch {}
-            }
-            if (needStore) {
-                SwapParam memory swap = abi.decode(_swapData, (SwapParam));
-                _store(
-                    _orderId,
-                    swapTemp.fromChain,
-                    swapTemp.srcToken,
-                    swap.dstToken,
-                    swapTemp.srcAmount,
-                    swap.receiver,
-                    swap.minAmount,
-                    swapTemp.from,
-                    _callbackData
-                );
-                return;
-            }
+            (swapTemp.swapToken, swapTemp.swapAmount, swapTemp.receiver) = _swap(
+                swapTemp.srcToken,
+                swapTemp.srcAmount,
+                swapTemp.inputBalance,
+                _swapData
+            );
         }
-
         if (_callbackData.length != 0) {
-            gaslf = gasleft();
+            uint256 gaslf = gasleft();
+            uint256 minExecGas = gasForReFund;
             if (gaslf > minExecGas) {
                 try
                     this.remoteCall{gas: (gaslf - minExecGas)}(swapTemp.swapToken, swapTemp.swapAmount, _callbackData)
@@ -332,15 +327,15 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
         inputBalance = balance - _amount;
     }
 
-    function remoteSwap(
-        address _srcToken,
-        uint256 _amount,
-        uint256 _initBalance,
-        bytes calldata _swapData
-    ) external returns (address dstToken, uint256 dstAmount, address receiver) {
-        if (msg.sender != address(this)) revert Errors.SELF_ONLY();
-        (dstToken, dstAmount, receiver) = _swap(_srcToken, _amount, _initBalance, _swapData);
-    }
+    // function remoteSwap(
+    //     address _srcToken,
+    //     uint256 _amount,
+    //     uint256 _initBalance,
+    //     bytes calldata _swapData
+    // ) external returns (address dstToken, uint256 dstAmount, address receiver) {
+    //     if (msg.sender != address(this)) revert Errors.SELF_ONLY();
+    //     (dstToken, dstAmount, receiver) = _swap(_srcToken, _amount, _initBalance, _swapData);
+    // }
 
     function remoteCall(
         address _callToken,
@@ -391,12 +386,12 @@ contract ReceiverV2 is Ownable2Step, SwapCallV2, ReentrancyGuard, IButterReceive
         );
     }
 
-    // function _setBridgeAddress(address _bridgeAddress) internal returns (bool) {
-    //     if (!_bridgeAddress.isContract()) revert Errors.NOT_CONTRACT();
-    //     bridgeAddress = _bridgeAddress;
-    //     emit SetBridgeAddress(_bridgeAddress);
-    //     return true;
-    // }
+    function _setBridgeAddress(address _bridgeAddress) internal returns (bool) {
+        if (!_bridgeAddress.isContract()) revert Errors.NOT_CONTRACT();
+        bridgeAddress = _bridgeAddress;
+        emit SetBridgeAddress(_bridgeAddress);
+        return true;
+    }
 
     function rescueFunds(address _token, uint256 _amount) external onlyOwner {
         _transfer(_token, msg.sender, _amount);
