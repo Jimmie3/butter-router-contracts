@@ -1,0 +1,32 @@
+let { create, getTronDeployer } = require("../../utils/create.js");
+let { verify } = require("../../utils/verify.js");
+let { saveDeployment } = require("../../utils/helper.js");
+let { getConfig } = require("../../configs/config.js");
+
+module.exports = async (taskArgs, hre) => {
+    const { ethers } = hre;
+    const accounts = await ethers.getSigners();
+    const deployer = accounts[0];
+
+    let config = getConfig(network.name);
+    if (!config) {
+        throw "config not set";
+    }
+    let deployer_address;
+    if (network.name === "Tron" || network.name === "TronTest") {
+        deployer_address = await getTronDeployer(true, network.name);
+    } else {
+        deployer_address = deployer.address;
+    }
+    let salt = process.env.SWAP_AGG_DEPLOY_SALT;
+    let swapAggregator = await create(hre, deployer, "SwapAggregator", ["address", "address"], [deployer_address, config.wToken], salt);
+    console.log("SwapAggregator address :", swapAggregator);
+    await saveDeployment(network.name, "SwapAggregator", swapAggregator);
+    await verify(
+        swapAdapter,
+        [deployer_address],
+        "contracts/SwapAggregator.sol:SwapAggregator",
+        hre.network.config.chainId,
+        true
+    );
+};
