@@ -172,7 +172,7 @@ abstract contract SwapCallV2 {
             bool result;
             DexType dexType = swap.dexType;
             if (dexType == DexType.FILL) {
-                result = _makeAggFill(_token, swap.callTo, amount, swap.callData);
+                result = _makeAggFill(_token, swap.approveTo, swap.callTo, amount, swap.callData);
             } else if (dexType == DexType.MIX) {
                 result = _makeMixSwap(_token, amount, swap.callData);
             } else {
@@ -256,7 +256,8 @@ abstract contract SwapCallV2 {
 
     function _makeAggFill(
         address _token,
-        address _router,
+        address _approveTo,
+        address _callTo,
         uint256 _amount,
         bytes memory _swapData
     ) internal returns (bool result) {
@@ -279,9 +280,9 @@ abstract contract SwapCallV2 {
         assembly {
             sig := mload(add(callData, 32))
         }
-        _checkApproval(_router, sig);
-        uint256 value = _approveToken(_token, _router, _amount);
-        (result, ) = _router.call{value: value}(callData);
+        _checkApproval(_callTo, sig);
+        uint256 value = _approveToken(_token, _approveTo, _amount);
+        (result, ) = _callTo.call{value: value}(callData);
     }
 
     function _approveToken(address token, address spender, uint256 amount) internal returns (uint256 value) {
