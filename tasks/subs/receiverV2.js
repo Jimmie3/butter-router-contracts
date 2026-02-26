@@ -30,12 +30,12 @@ module.exports = async (taskArgs, hre) => {
     if (!config) {
         throw "config not set";
     }
-    await hre.run("receiver:deploy", { bridge: config.v3.bridge, wtoken: config.wToken });
+    await hre.run("receiverV2:deploy", { bridge: config.v3.bridge, wtoken: config.wToken });
     let receiver_addr = await getReceiverAddress("",network.name);
     let adapt_addr = await getDeployment(network.name, "SwapAdapterV3");
     config.v3.executors.push(adapt_addr);
     let executors_s = config.v3.executors.join(",");
-    await hre.run("receiver:setAuthorization", { receiver: receiver_addr, executors: executors_s });
+    await hre.run("receiverV2:setAuthorization", { receiver: receiver_addr, executors: executors_s });
 };
 
 task("receiverV2:deploy", "deploy receiver")

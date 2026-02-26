@@ -4,6 +4,7 @@ let config = new Map([
         "Eth",
         {
             wToken: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -49,6 +50,7 @@ let config = new Map([
         "Bsc",
         {
             wToken: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -94,6 +96,7 @@ let config = new Map([
         "Matic",
         {
             wToken: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -329,6 +332,7 @@ let config = new Map([
         "Blast",
         {
             wToken: "0x4300000000000000000000000000000000000004",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -364,6 +368,7 @@ let config = new Map([
         "Base",
         {
             wToken: "0x4200000000000000000000000000000000000006",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -403,6 +408,7 @@ let config = new Map([
         "Optimism",
         {
             wToken: "0x4200000000000000000000000000000000000006",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -436,6 +442,7 @@ let config = new Map([
         "Arbitrum",
         {
             wToken: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             v2: {
                 mos: "0xfeB2b97e4Efce787c08086dC16Ab69E063911380",
                 fee: {
@@ -625,6 +632,94 @@ let config = new Map([
             removes: [
                 "0xBEf06a32166C4B819fF04cCfa887733B8bb67eB5", // bridge
             ],
+        },
+    ],
+
+    [
+        "Unichain",
+        {
+            wToken: "0x4200000000000000000000000000000000000006",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            v3: {
+                bridge: "0x0000317Bec33Af037b5fAb2028f52d14658F6A56",
+                fee: {
+                    receiver: "0x51C700e5bE790C91F14D42F85ca90aed9f2D142e",
+                    routerFeeRate: "0", //denominator is 10000
+                    routerFixedFee: "0",
+                    maxReferrerFeeRate: "2000",
+                    maxReferrerNativeFee: "6000000000000000",
+                },
+                executors: [
+                    "0x111111125421cA6dc452d289314280a0f8842A65", //1inch v6
+                ],
+            },
+            removes: [],
+        },
+    ],
+
+    [
+        "Xlayer",
+        {
+            wToken: "0xe538905cf8410324e03a5a23c1c177a474d59b2b",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            v3: {
+                bridge: "0x0000317Bec33Af037b5fAb2028f52d14658F6A56",
+                fee: {
+                    receiver: "0x51C700e5bE790C91F14D42F85ca90aed9f2D142e",
+                    routerFeeRate: "0", //denominator is 10000
+                    routerFixedFee: "0",
+                    maxReferrerFeeRate: "2000",
+                    maxReferrerNativeFee: "6000000000000000",
+                },
+                executors: [
+                    "0x111111125421cA6dc452d289314280a0f8842A65", //1inch v6
+                ],
+            },
+            removes: [],
+        },
+    ],
+
+    [
+        "Mon",
+        {
+            wToken: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            v3: {
+                bridge: "0x0000317Bec33Af037b5fAb2028f52d14658F6A56",
+                fee: {
+                    receiver: "0x51C700e5bE790C91F14D42F85ca90aed9f2D142e",
+                    routerFeeRate: "0", //denominator is 10000
+                    routerFixedFee: "0",
+                    maxReferrerFeeRate: "2000",
+                    maxReferrerNativeFee: "1000000000000000000000",
+                },
+                executors: [
+                    "0x111111125421cA6dc452d289314280a0f8842A65", //1inch v6
+                ],
+            },
+            removes: [],
+        },
+    ],
+
+    [
+        "Avalanche",
+        {
+            wToken: "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7",
+            uniPermit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            v3: {
+                bridge: "0x0000317Bec33Af037b5fAb2028f52d14658F6A56",
+                fee: {
+                    receiver: "0x51C700e5bE790C91F14D42F85ca90aed9f2D142e",
+                    routerFeeRate: "0", //denominator is 10000
+                    routerFixedFee: "0",
+                    maxReferrerFeeRate: "2000",
+                    maxReferrerNativeFee: "1000000000000000000",
+                },
+                executors: [
+                    "0x111111125421cA6dc452d289314280a0f8842A65", //1inch v6
+                ],
+            },
+            removes: [],
         },
     ],
 

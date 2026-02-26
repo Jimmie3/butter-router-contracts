@@ -221,13 +221,15 @@ abstract contract SwapCallV2 {
     function _makeMixSwap(address _srcToken, uint256 _amount, bytes memory _swapData) internal returns (bool result) {
         MixSwap[] memory mixSwaps = abi.decode(_swapData, (MixSwap[]));
         uint256 length = mixSwaps.length;
-        address self = address(this);
-
+        uint256 swapBalanceBefore;
         for (uint256 i = 0; i < length; ) {
             MixSwap memory mix = mixSwaps[i];
+            if((i + 1) < length) {
+                swapBalanceBefore = _getBalance(mixSwaps[i + 1].srcToken, address(this));
+            }
             if (i != 0) {
                 _srcToken = mix.srcToken;
-                _amount = _getBalance(_srcToken, self);
+                _amount = _getBalance(_srcToken, address(this)) - swapBalanceBefore;
             }
             bytes memory callData = mix.callData;
             uint256 offset = mix.offset;
