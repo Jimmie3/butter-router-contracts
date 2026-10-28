@@ -13,6 +13,7 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     uint256 public constant DENOMINATOR = 10000;
+    uint256 public constant MAX_AFFILIATE_FEE_RATE_CAP = 1000; // 10%
 
     using SafeERC20 for IERC20;
 
@@ -20,6 +21,12 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
     address public relayExecutor;
     uint16 public currentRegisterId;
     uint16 public maxAffiliateFeeRate;
+    // Dead - `register()` never actually reads this (only `whitelist`
+    // itself, for the register-fee discount in `getUserRegisterFee`), so
+    // `triggerRegisterWhitelist()` toggling it has no effect on who can
+    // register. Left in place rather than removed: this is a storage slot
+    // on the already-live production proxy, and removing it would shift
+    // every field declared after it.
     bool public isRegisterNeedWhitelist;
 
     struct AffiliateInfo {
@@ -60,6 +67,7 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
     error NOT_CONTRACT();
     error ONLY_RELAY_EXECUTOR();
     error INVALID_MAX_VALUE();
+    error MAX_AFFILIATE_FEE_RATE_TOO_HIGH();
     error AFFILIATE_NOT_EXIST();
     error FEE_BIG_THAN_IN_AMOUNT();
     error WALLET_REGISTERED();
@@ -94,7 +102,12 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
 
     function initialize(address _admin) external initializer {
         if (_admin == address(0)) revert ZERO_ADDRESS();
-        maxAffiliateFeeRate = 3000;
+        // The already-live production proxy initialized with 3000 (30%)
+        // before this cap existed - that value is immutable history, not
+        // touched here. A fresh deployment now starts at the cap itself
+        // instead of a value `setMaxAffiliateFeeRate` would immediately
+        // reject raising it back to.
+        maxAffiliateFeeRate = uint16(MAX_AFFILIATE_FEE_RATE_CAP);
         _grantRole(MANAGER_ROLE, _admin);
         _grantRole(UPGRADER_ROLE, _admin);
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -107,7 +120,14 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
         emit SetExecutorAndSwap(_relayExecutor, _swap);
     }
 
+    // Capped at `MAX_AFFILIATE_FEE_RATE_CAP` (10%) - matches the
+    // independent total-fee-rate cap on the RelayExecutor side, so this can
+    // never be configured above what the other side would reject anyway.
+    // The live production proxy's existing `maxAffiliateFeeRate` (30%, set
+    // before this cap existed) is untouched until the next time this is
+    // called - lowering it now is a governance action, not automatic.
     function setMaxAffiliateFeeRate(uint16 _maxAffiliateFeeRate) external onlyRole(MANAGER_ROLE) {
+        if (_maxAffiliateFeeRate > MAX_AFFILIATE_FEE_RATE_CAP) revert MAX_AFFILIATE_FEE_RATE_TOO_HIGH();
         maxAffiliateFeeRate = _maxAffiliateFeeRate;
         emit SetMaxAffiliateFeeRate(_maxAffiliateFeeRate);
     }
@@ -216,6 +236,9 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
                 fee = TokenFee({token: token, feeAmount: amount, outAmount: amount});
                 totalOutAmount += amount;
             } else {
+                // `minOut` hardcoded to 1 (no slippage floor) is fine
+                // here - `swap` prices off an oracle feed, not an AMM pool,
+                // so there's no sandwich-attack surface to protect against.
                 IERC20(token).forceApprove(address(swap), amount);
                 uint256 outAmount = swap.swap(token, _outToken, amount, 1, address(this));
                 fee = TokenFee({token: token, feeAmount: amount, outAmount: outAmount});
@@ -293,6 +316,10 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
         return affiliateTokenFees[_id][_token];
     }
 
+    // Mirrors `collectAffiliatesFee`'s own overage handling exactly
+    // (revert, not silently clamp) - a quote that clamped while the real
+    // execution later reverts would quote a nonzero fee for an order that
+    // actually ends up paying none.
     function getAffiliatesFee(
         uint256 amount,
         bytes calldata feeData
@@ -306,9 +333,9 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
             (, uint256 fee) = _getAffiliateFee(amount, id, rate);
             if (fee != 0) {
                 totalFee += fee;
+                if (totalFee > amount) revert FEE_BIG_THAN_IN_AMOUNT();
             }
         }
-        if (totalFee > amount) totalFee = amount;
     }
 
     // affiliates n * (2 byte affiliateId + 2 byte fee rate)
@@ -318,12 +345,7 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
         uint256 amount,
         bytes calldata feeData
     ) external override returns (uint256 totalFee) {
-        if (
-            msg.sender != relayExecutor &&
-            msg.sender != 0xCA9a3C761dC02B5784f77409bf641Bf6482AAA94 && 
-            msg.sender != 0x42D64eD9381bF456697b0C360e8acE139F176a80 &&
-            msg.sender != 0x00004080D86e1077ce96E67C1B167fF105025307
-        ) revert ONLY_RELAY_EXECUTOR();
+        if (msg.sender != relayExecutor) revert ONLY_RELAY_EXECUTOR();
 
         uint256 offset;
         uint256 len = feeData.length / 4;
