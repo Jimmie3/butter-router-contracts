@@ -13,7 +13,19 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     uint256 public constant DENOMINATOR = 10000;
-    uint256 public constant MAX_AFFILIATE_FEE_RATE_CAP = 1000; // 10%
+    // The hard ceiling `setMaxAffiliateFeeRate` will ever allow - not the
+    // actual operational default (see `DEFAULT_MAX_AFFILIATE_FEE_RATE`
+    // below). Set well above the real operating value specifically so
+    // RelayExecutor's own independent total-fee-rate backstop (a pure
+    // catastrophic ceiling, 30%, not meant to be hit on normal business) is
+    // never the tighter of the two: a hard cap here below that would make
+    // this the binding constraint instead, for no reason.
+    uint256 public constant MAX_AFFILIATE_FEE_RATE_CAP = 3000; // 30%
+    // The actual starting operational value for a fresh deployment -
+    // independent of `MAX_AFFILIATE_FEE_RATE_CAP`, which only bounds how
+    // high `setMaxAffiliateFeeRate` can ever raise it, not what it starts
+    // at.
+    uint256 public constant DEFAULT_MAX_AFFILIATE_FEE_RATE = 1000; // 10%
 
     using SafeERC20 for IERC20;
 
@@ -102,12 +114,14 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
 
     function initialize(address _admin) external initializer {
         if (_admin == address(0)) revert ZERO_ADDRESS();
-        // The already-live production proxy initialized with 3000 (30%)
-        // before this cap existed - that value is immutable history, not
-        // touched here. A fresh deployment now starts at the cap itself
-        // instead of a value `setMaxAffiliateFeeRate` would immediately
-        // reject raising it back to.
-        maxAffiliateFeeRate = uint16(MAX_AFFILIATE_FEE_RATE_CAP);
+        // The already-live production proxy initialized with its own
+        // literal 3000 (30%) long before either of these constants existed
+        // - that value is immutable history, unrelated to (and not touched
+        // by) `DEFAULT_MAX_AFFILIATE_FEE_RATE` happening to read 1000 here.
+        // A fresh deployment starts at the real operational default, not
+        // the (much higher) hard ceiling `MAX_AFFILIATE_FEE_RATE_CAP` only
+        // exists to bound `setMaxAffiliateFeeRate` by.
+        maxAffiliateFeeRate = uint16(DEFAULT_MAX_AFFILIATE_FEE_RATE);
         _grantRole(MANAGER_ROLE, _admin);
         _grantRole(UPGRADER_ROLE, _admin);
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -120,12 +134,13 @@ contract AffiliateFeeManager is Initializable, UUPSUpgradeable, AccessControlEnu
         emit SetExecutorAndSwap(_relayExecutor, _swap);
     }
 
-    // Capped at `MAX_AFFILIATE_FEE_RATE_CAP` (10%) - matches the
-    // independent total-fee-rate cap on the RelayExecutor side, so this can
-    // never be configured above what the other side would reject anyway.
-    // The live production proxy's existing `maxAffiliateFeeRate` (30%, set
-    // before this cap existed) is untouched until the next time this is
-    // called - lowering it now is a governance action, not automatic.
+    // Capped at `MAX_AFFILIATE_FEE_RATE_CAP` (30%) - matches RelayExecutor's
+    // own independent total-fee-rate backstop, so this can never be
+    // configured above what that side would skip the fee entirely over
+    // anyway. The actual operating value is expected to stay at
+    // `DEFAULT_MAX_AFFILIATE_FEE_RATE` (10%) in normal business - this cap
+    // is a ceiling on how high governance could ever raise it, not the
+    // recommended value itself.
     function setMaxAffiliateFeeRate(uint16 _maxAffiliateFeeRate) external onlyRole(MANAGER_ROLE) {
         if (_maxAffiliateFeeRate > MAX_AFFILIATE_FEE_RATE_CAP) revert MAX_AFFILIATE_FEE_RATE_TOO_HIGH();
         maxAffiliateFeeRate = _maxAffiliateFeeRate;
